@@ -12,7 +12,6 @@ function viewHome() {
       <a class="hub-tile t-browse" href="#/browse">${TILE_ICONS.browse}<span class="t">Browse</span></a>
       <a class="hub-tile t-coll" href="#/collections">${TILE_ICONS.coll}<span class="t">Collections</span></a>
       <a class="hub-tile t-dash" href="#/dashboard">${TILE_ICONS.dash}<span class="t">Dashboard</span></a>
-      <a class="hub-tile t-nim" href="#/notinmaster">${TILE_ICONS.nim}<span class="t">Not in Master</span></a>
     </div>
   </div>`;
 }

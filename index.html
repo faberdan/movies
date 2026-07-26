@@ -106,8 +106,8 @@ h1.page-title.g-nim,.gtext.g-nim{background:var(--g-nim);-webkit-background-clip
 
 /* ---------- home hub ---------- */
 .hub{padding-top:34px}
-.hub-tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
-@media(max-width:560px){.hub-tiles{grid-template-columns:1fr}}
+.hub-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:900px){.hub-tiles{grid-template-columns:1fr}}
 .hub-tile{border-radius:20px;padding:28px 26px;min-height:330px;display:flex;flex-direction:column;justify-content:flex-end;color:#fff;position:relative;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease}
 @media(max-width:900px){.hub-tile{min-height:240px}}
 .hub-tile:hover{transform:translateY(-3px)}
@@ -571,7 +571,6 @@ function viewHome() {
       <a class="hub-tile t-browse" href="#/browse">${TILE_ICONS.browse}<span class="t">Browse</span></a>
       <a class="hub-tile t-coll" href="#/collections">${TILE_ICONS.coll}<span class="t">Collections</span></a>
       <a class="hub-tile t-dash" href="#/dashboard">${TILE_ICONS.dash}<span class="t">Dashboard</span></a>
-      <a class="hub-tile t-nim" href="#/notinmaster">${TILE_ICONS.nim}<span class="t">Not in Master</span></a>
     </div>
   </div>`;
 }
