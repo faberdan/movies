@@ -27,6 +27,12 @@ def main():
         if m.get("year") is not None: m["year"] = int(m["year"])
     for r in data["notInMaster"]:
         if r.get("title") is not None: r["title"] = str(r["title"])
+    # merge Plex links if present
+    plex_path = os.path.join(HERE, "plex.json")
+    if os.path.exists(plex_path):
+        px = json.load(open(plex_path))
+        for m in data["movies"]:
+            if px.get(m["id"]): m["plex"] = px[m["id"]]
     # merge TMDB enrichment if present
     tmdb_path = os.path.join(HERE, "tmdb.json")
     if os.path.exists(tmdb_path):

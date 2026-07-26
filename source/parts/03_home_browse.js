@@ -7,15 +7,6 @@ const TILE_ICONS = {
   nim:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 6h14l2 7v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6Z"/></svg>',
 };
 function viewHome() {
-  const favorites = MOVIES.filter(m => m.favorite === 'Yes');
-  const watchNext = MOVIES.filter(m => m.status === 'Up Next' || m.status === 'For Later')
-    .sort((a,b) => (a.status === 'Up Next' ? 0 : 1) - (b.status === 'Up Next' ? 0 : 1));
-  const recent = MOVIES.filter(m => m.addedTs).sort(SORTS.added.fn).slice(0, 14);
-  const bpWinners = MOVIES.filter(m => m.oscarBP === 'Winner').sort(SORTS.newest.fn);
-  const section = (title, list, moreHref) => !list.length ? '' :
-    `<section class="section"><div class="section-head"><h2>${title}</h2>
-     ${moreHref ? `<a class="more" href="${moreHref}">View all →</a>` : ''}</div>
-     ${rowHTML(list.slice(0, 14))}</section>`;
   return `<div class="wrap hub">
     <div class="hub-tiles">
       <a class="hub-tile t-browse" href="#/browse">${TILE_ICONS.browse}<span class="t">Browse</span></a>
@@ -23,10 +14,6 @@ function viewHome() {
       <a class="hub-tile t-dash" href="#/dashboard">${TILE_ICONS.dash}<span class="t">Dashboard</span></a>
       <a class="hub-tile t-nim" href="#/notinmaster">${TILE_ICONS.nim}<span class="t">Not in Master</span></a>
     </div>
-    ${section('Watch next', watchNext, browseHash({...emptyF(), status:['Up Next','For Later']}))}
-    ${section('Favorites', favorites, browseHash({...emptyF(), fav:'Yes'}))}
-    ${section('Best Picture winners', bpWinners, browseHash({...emptyF(), obp:'Winner', sort:'newest'}))}
-    ${section('Recently added', recent, browseHash({...emptyF(), sort:'added'}))}
   </div>`;
 }
 function wireHome() {}
@@ -66,87 +53,181 @@ function wireSearchBox(inputId, sugId) {
   inp.addEventListener('blur', () => setTimeout(closeSuggest, 180));
 }
 
-/* ---------- browse ---------- */
-function chipSet(title, key, values, f, labels) {
-  if (!values.length) return '';
-  return `<h3>${title}</h3><div class="fchips">${values.map(v =>
-    `<button class="fchip ${f[key].includes(String(v)) ? 'on' : ''}" data-fk="${key}" data-fv="${attr(v)}">${esc(labels ? labels(v) : v)}</button>`).join('')}</div>`;
+/* ---------- browse: filter dropdowns ---------- */
+const AWARD_OPTS = [
+  {k:'obpW', label:'Best Picture Winner'},
+  {k:'obpN', label:'Best Picture Nominee'},
+  {k:'oscw', label:'Oscar winner'},
+  {k:'oscn', label:'Oscar nominee'},
+  {k:'bafta', label:'BAFTA Best Film'},
+];
+function awardOn(f, k) {
+  if (k === 'obpW') return f.obp === 'Winner';
+  if (k === 'obpN') return f.obp === 'Nominee';
+  return !!f[k];
+}
+function awardToggle(f, k) {
+  if (k === 'obpW') f.obp = f.obp === 'Winner' ? '' : 'Winner';
+  else if (k === 'obpN') f.obp = f.obp === 'Nominee' ? '' : 'Nominee';
+  else f[k] = !f[k];
+}
+function ddDefs() {
+  const defs = [
+    {key:'genre',  label:'Genre',  kind:'multi', opts: ALL_GENRES.map(v=>[v,v])},
+    {key:'decade', label:'Decade', kind:'multi', opts: ALL_DECADES.map(d=>[String(d), d+'s'])},
+    {key:'status', label:'Status', kind:'multi', opts: [['Watched','Watched'],['Up Next','Up Next'],['For Later','For Later'],['Not Gonna','Not Gonna'],['(none)','No status']]},
+    {key:'wa',     label:'Watch Again', kind:'multi', opts: [['Yes','Yes'],['Maybe','Maybe'],['No','No'],['New','New'],['(none)','Not set']]},
+    {key:'awards', label:'Awards', kind:'awards'},
+    {key:'director', label:'Director', kind:'single', opts: ALL_DIRECTORS, search:true},
+  ];
+  if (HAS_CAST) defs.push({key:'actor', label:'Actor', kind:'single', opts: ALL_ACTORS, search:true});
+  defs.push({key:'ratings', label:'Ratings', kind:'ratings'});
+  defs.push({key:'runtime', label:'Runtime', kind:'multi', opts: Object.keys(RUNTIME_BUCKETS).map(k=>[k, RUNTIME_BUCKETS[k].label])});
+  if (ALL_FEELS.length) defs.push({key:'feel', label:'Feel', kind:'multi', opts: ALL_FEELS.map(v=>[v,v])});
+  if (ALL_SERVICES.length) defs.push({key:'service', label:'Service', kind:'multi', opts: ALL_SERVICES.map(v=>[v,v])});
+  defs.push({key:'type', label:'Type', kind:'multi1', opts: [['Movie','Movie'],['TV','TV']]});
+  return defs;
+}
+function ddCount(f, d) {
+  if (d.kind === 'multi') return f[d.key].length;
+  if (d.kind === 'multi1') return f[d.key] ? 1 : 0;
+  if (d.kind === 'single') return f[d.key] ? 1 : 0;
+  if (d.kind === 'awards') return AWARD_OPTS.filter(o => awardOn(f, o.k)).length;
+  if (d.kind === 'ratings') return (f.imdbMin?1:0)+(f.rtcMin?1:0)+(f.rtaMin?1:0);
+  return 0;
+}
+function ddPanelHTML(f, d) {
+  const row = (on, label, dk, dv) => `<button class="dd-opt ${on?'on':''}" role="option" aria-selected="${on}" data-dk="${attr(dk)}" data-dv="${attr(dv)}"><span class="chk">${on?'✓':''}</span>${esc(label)}</button>`;
+  if (d.kind === 'multi') return d.opts.map(([v,l]) => row(f[d.key].includes(v), l, d.key, v)).join('');
+  if (d.kind === 'multi1') return d.opts.map(([v,l]) => row(f[d.key] === v, l, '_single:'+d.key, v)).join('');
+  if (d.kind === 'awards') return AWARD_OPTS.map(o => row(awardOn(f, o.k), o.label, '_award', o.k)).join('');
+  if (d.kind === 'single') {
+    const sel = f[d.key];
+    const list = d.opts.filter(v => v !== sel).map(v => row(false, v, '_single:'+d.key, v)).join('');
+    return `<input type="text" class="dd-search" placeholder="Search ${d.label.toLowerCase()}s" aria-label="Search ${attr(d.label)}"><div class="dd-list">${sel ? row(true, sel, '_single:'+d.key, sel) : ''}${list}</div>`;
+  }
+  if (d.kind === 'ratings') {
+    const slider = (id, label, val, max, step, fmt) => `<div class="dd-slider"><label for="dds-${id}">${label}</label>
+      <input type="range" id="dds-${id}" data-rk="${id}" min="0" max="${max}" step="${step}" value="${val}">
+      <span class="rv" id="ddsv-${id}">${val ? fmt(val) : 'Any'}</span></div>`;
+    return slider('imdbMin','IMDb', f.imdbMin, 9, 0.5, v=>'≥ '+v)
+      + slider('rtcMin','RT Critics', f.rtcMin, 100, 5, v=>'≥ '+v+'%')
+      + slider('rtaMin','RT Audience', f.rtaMin, 100, 5, v=>'≥ '+v+'%');
+  }
+  return '';
 }
 function viewBrowse(f) {
   const list = applyFilters(f);
-  const active = activeChips(f);
   const sortOpts = Object.entries(SORTS).map(([k,s]) => `<option value="${k}" ${f.sort===k?'selected':''}>${s.label}</option>`).join('');
+  const dds = ddDefs().map(d => { const n = ddCount(f, d);
+    return `<div class="dd" data-dd="${d.key}">
+      <button class="dd-btn ${n?'has':''}" aria-haspopup="listbox" aria-expanded="false">${d.label}${n?`<span class="dd-n">${n}</span>`:''}<span class="dd-car">▾</span></button>
+      <div class="dd-panel" role="listbox" hidden>${ddPanelHTML(f, d)}</div></div>`;
+  }).join('');
   return `<div class="wrap">
   <h1 class="page-title g-browse">Browse</h1>
-  <div class="browse-layout">
-    <aside class="filters" id="filterPanel" aria-label="Filters">
-      <h3>Decade</h3><div class="fchips">${ALL_DECADES.map(d =>
-        `<button class="fchip ${f.decade.includes(String(d))?'on':''}" data-fk="decade" data-fv="${d}">${d}s</button>`).join('')}</div>
-      ${chipSet('Genre','genre',ALL_GENRES,f)}
-      ${chipSet('Notion status','status',['Watched','Up Next','For Later','Not Gonna','(none)'],f)}
-      <h3>Favorite</h3><div class="fchips">
-        <button class="fchip ${f.fav==='Yes'?'on':''}" data-fs="fav" data-fv="Yes">♥ Favorites</button></div>
-      ${chipSet('Watch again?','wa',['Yes','Maybe','No','New','(none)'],f)}
-      ${chipSet('Runtime','runtime',Object.keys(RUNTIME_BUCKETS),f,k=>RUNTIME_BUCKETS[k].label)}
-      <h3>Minimum IMDb</h3>
-      <input type="range" id="imdbMin" min="0" max="9" step="0.5" value="${f.imdbMin}" aria-label="Minimum IMDb rating">
-      <div class="range-val" id="imdbMinVal">${f.imdbMin ? '≥ '+f.imdbMin : 'Any'}</div>
-      <h3>Minimum RT Critics</h3>
-      <input type="range" id="rtcMin" min="0" max="100" step="5" value="${f.rtcMin}" aria-label="Minimum Rotten Tomatoes critics score">
-      <div class="range-val" id="rtcMinVal">${f.rtcMin ? '≥ '+f.rtcMin+'%' : 'Any'}</div>
-      <h3>Minimum RT Audience</h3>
-      <input type="range" id="rtaMin" min="0" max="100" step="5" value="${f.rtaMin}" aria-label="Minimum Rotten Tomatoes audience score">
-      <div class="range-val" id="rtaMinVal">${f.rtaMin ? '≥ '+f.rtaMin+'%' : 'Any'}</div>
-      <h3>Director</h3>
-      <select id="directorSel" aria-label="Filter by director"><option value="">Any director</option>
-        ${ALL_DIRECTORS.map(d => `<option ${f.director===d?'selected':''} value="${attr(d)}">${esc(d)}</option>`).join('')}</select>
-      ${HAS_CAST ? `<h3>Actor</h3><select id="actorSel" aria-label="Filter by actor"><option value="">Any actor</option>
-        ${ALL_ACTORS.map(d => `<option ${f.actor===d?'selected':''} value="${attr(d)}">${esc(d)}</option>`).join('')}</select>` : ''}
-      <h3>Awards</h3><div class="fchips">
-        <button class="fchip ${f.obp==='Winner'?'on':''}" data-fs="obp" data-fv="Winner">BP Winner</button>
-        <button class="fchip ${f.obp==='Nominee'?'on':''}" data-fs="obp" data-fv="Nominee">BP Nominee</button>
-        <button class="fchip ${f.oscw?'on':''}" data-fb="oscw">Oscar winner</button>
-        <button class="fchip ${f.oscn?'on':''}" data-fb="oscn">Oscar nominee</button>
-        <button class="fchip ${f.bafta?'on':''}" data-fb="bafta">BAFTA Best Film</button></div>
-      ${chipSet('Feel','feel',ALL_FEELS,f)}
-      ${chipSet('Service','service',ALL_SERVICES,f)}
-      <h3>Type</h3><div class="fchips">
-        <button class="fchip ${f.type==='Movie'?'on':''}" data-fs="type" data-fv="Movie">Movie</button>
-        <button class="fchip ${f.type==='TV'?'on':''}" data-fs="type" data-fv="TV">TV</button></div>
-      <button class="btn-clear" id="clearFilters">Clear all filters</button>
-    </aside>
-    <div>
-      <div class="browse-top">
-        <button class="btn-filter-toggle" id="toggleFilters" aria-expanded="false">☰ Filters</button>
-        <span class="count"><b>${list.length}</b> ${plur(list.length,'title')}${f.q ? ` for “${esc(f.q)}”` : ''}</span>
-        <span class="spacer"></span>
-        <label class="sr-only" for="sortSel">Sort by</label>
-        <select id="sortSel">${sortOpts}</select>
-      </div>
-      ${active.length ? `<div class="active-chips">${active.join('')}
-        <button class="achip clearall" id="clearAll2">Clear all ✕</button></div>` : ''}
-      ${list.length ? gridHTML(list) : `<div class="empty"><div class="big">Nothing matches those filters</div>
-        <p>Try removing a filter or two.</p></div>`}
-    </div>
-  </div></div>`;
+  <div class="filter-bar">
+    ${dds}
+    <button class="dd-btn fav-toggle ${f.fav==='Yes'?'has':''}" id="favToggle">♥ Favorites</button>
+    <span class="spacer"></span>
+    <label class="sr-only" for="sortSel">Sort by</label>
+    <select id="sortSel">${sortOpts}</select>
+  </div>
+  <div class="active-chips" id="activeChips"></div>
+  <div class="browse-top"><span class="count" id="resCount"></span></div>
+  <div id="resGrid"></div>
+  </div>`;
+}
+function wireBrowse(f) {
+  const grid = document.getElementById('resGrid');
+  const syncURL = () => { try { history.replaceState(null, '', location.pathname + location.search + browseHash(f)); } catch(e) {} };
+  const closeAll = () => document.querySelectorAll('.dd-panel').forEach(p => { p.hidden = true; p.parentNode.querySelector('.dd-btn').setAttribute('aria-expanded','false'); });
+
+  function renderChips() {
+    const chips = activeChips(f), fns = activeChips._fns || [];
+    const el = document.getElementById('activeChips');
+    el.innerHTML = chips.length ? chips.join('') + '<button class="achip clearall" id="clearAll2">Clear all ✕</button>' : '';
+    el.querySelectorAll('.achip [data-clear]').forEach((btn, i) => btn.addEventListener('click', () => { fns[i] && fns[i](f); update(true); }));
+    document.getElementById('clearAll2')?.addEventListener('click', () => { f = emptyF(); update(true); });
+  }
+  function renderButtons() {
+    ddDefs().forEach(d => {
+      const dd = document.querySelector(`.dd[data-dd="${d.key}"]`); if (!dd) return;
+      const n = ddCount(f, d), btn = dd.querySelector('.dd-btn');
+      btn.classList.toggle('has', n > 0);
+      btn.innerHTML = `${d.label}${n?`<span class="dd-n">${n}</span>`:''}<span class="dd-car">▾</span>`;
+    });
+    document.getElementById('favToggle').classList.toggle('has', f.fav === 'Yes');
+  }
+  function update(rebuildPanels) {
+    const list = applyFilters(f);
+    document.getElementById('resCount').innerHTML = `<b>${list.length}</b> ${plur(list.length,'title')}${f.q ? ` for “${esc(f.q)}”` : ''}`;
+    grid.innerHTML = list.length ? gridHTML(list) : `<div class="empty"><div class="big">Nothing matches those filters</div><p>Remove a filter or two.</p></div>`;
+    renderChips(); renderButtons(); syncURL();
+    if (rebuildPanels) ddDefs().forEach(d => {
+      const p = document.querySelector(`.dd[data-dd="${d.key}"] .dd-panel`);
+      if (p && p.hidden) p.innerHTML = ddPanelHTML(f, d);
+    });
+  }
+  function refreshPanel(d, panel) { panel.innerHTML = ddPanelHTML(f, d); wirePanel(d, panel); }
+  function wirePanel(d, panel) {
+    panel.querySelectorAll('.dd-opt').forEach(opt => opt.addEventListener('click', () => {
+      const dk = opt.dataset.dk, dv = opt.dataset.dv;
+      if (dk === '_award') awardToggle(f, dv);
+      else if (dk.startsWith('_single:')) { const k = dk.slice(8); f[k] = f[k] === dv ? '' : dv; }
+      else f[dk] = f[dk].includes(dv) ? f[dk].filter(x => x !== dv) : [...f[dk], dv];
+      update(false); refreshPanel(d, panel);
+      if (d.kind === 'single') closeAll();
+    }));
+    const s = panel.querySelector('.dd-search');
+    if (s) { s.addEventListener('input', () => {
+        const nq = norm(s.value);
+        panel.querySelectorAll('.dd-list .dd-opt').forEach(o => { o.style.display = !nq || norm(o.dataset.dv).includes(nq) ? '' : 'none'; });
+      });
+      setTimeout(() => s.focus(), 30);
+    }
+    panel.querySelectorAll('input[type=range]').forEach(r => {
+      r.addEventListener('input', () => { const k = r.dataset.rk;
+        document.getElementById('ddsv-'+k).textContent = +r.value ? (k==='imdbMin' ? '≥ '+r.value : '≥ '+r.value+'%') : 'Any'; });
+      r.addEventListener('change', () => { f[r.dataset.rk] = +r.value; update(false); });
+    });
+  }
+  ddDefs().forEach(d => {
+    const dd = document.querySelector(`.dd[data-dd="${d.key}"]`); if (!dd) return;
+    const btn = dd.querySelector('.dd-btn'), panel = dd.querySelector('.dd-panel');
+    btn.addEventListener('click', e => { e.stopPropagation();
+      const open = !panel.hidden; closeAll();
+      if (!open) { refreshPanel(d, panel); panel.hidden = false; btn.setAttribute('aria-expanded','true'); }
+    });
+    panel.addEventListener('click', e => e.stopPropagation());
+  });
+  document.getElementById('favToggle').addEventListener('click', () => { f.fav = f.fav === 'Yes' ? '' : 'Yes'; update(true); });
+  document.getElementById('sortSel').addEventListener('change', e => { f.sort = e.target.value; update(true); });
+  if (window.__ddDocClose) document.removeEventListener('click', window.__ddDocClose);
+  window.__ddDocClose = () => closeAll();
+  document.addEventListener('click', window.__ddDocClose);
+  if (window.__ddEsc) document.removeEventListener('keydown', window.__ddEsc);
+  window.__ddEsc = e => { if (e.key === 'Escape') closeAll(); };
+  document.addEventListener('keydown', window.__ddEsc);
+  update(true);
 }
 function activeChips(f) {
   const chips = [];
-  const add = (label, mutate) => chips.push(`<span class="achip">${label}<button data-clear aria-label="Remove filter ${attr(label)}">✕</button></span>`) && clearFns.push(mutate);
   var clearFns = activeChips._fns = [];
+  const add = (label, mutate) => { chips.push(`<span class="achip">${label}<button data-clear aria-label="Remove filter">✕</button></span>`); clearFns.push(mutate); };
   if (f.q) add(`“${esc(f.q)}”`, x => x.q = '');
   f.decade.forEach(d => add(`${d}s`, x => x.decade = x.decade.filter(v=>v!==d)));
   f.genre.forEach(g => add(esc(g), x => x.genre = x.genre.filter(v=>v!==g)));
   f.status.forEach(s => add(esc(s==='(none)'?'No status':s), x => x.status = x.status.filter(v=>v!==s)));
   if (f.fav) add('♥ Favorites', x => x.fav = '');
-  f.wa.forEach(s => add('Again: '+esc(s), x => x.wa = x.wa.filter(v=>v!==s)));
+  f.wa.forEach(s => add('Again: '+esc(s==='(none)'?'not set':s), x => x.wa = x.wa.filter(v=>v!==s)));
   f.feel.forEach(s => add(esc(s), x => x.feel = x.feel.filter(v=>v!==s)));
   f.service.forEach(s => add(esc(s), x => x.service = x.service.filter(v=>v!==s)));
   f.runtime.forEach(s => add(esc(RUNTIME_BUCKETS[s].label), x => x.runtime = x.runtime.filter(v=>v!==s)));
   if (f.director) add(esc(f.director), x => x.director = '');
   if (f.actor) add(esc(f.actor), x => x.actor = '');
   if (f.type) add(esc(f.type), x => x.type = '');
-  if (f.obp) add('BP '+esc(f.obp), x => x.obp = '');
+  if (f.obp) add('Best Picture '+esc(f.obp), x => x.obp = '');
   if (f.oscw) add('Oscar winner', x => x.oscw = false);
   if (f.oscn) add('Oscar nominee', x => x.oscn = false);
   if (f.bafta) add('BAFTA Best Film', x => x.bafta = false);
@@ -154,36 +235,5 @@ function activeChips(f) {
   if (f.rtcMin) add('Critics ≥ '+f.rtcMin+'%', x => x.rtcMin = 0);
   if (f.rtaMin) add('Audience ≥ '+f.rtaMin+'%', x => x.rtaMin = 0);
   return chips;
-}
-function wireBrowse(f) {
-  const nav = () => { location.hash = browseHash(f).slice(1); };
-  document.querySelectorAll('[data-fk]').forEach(btn => btn.addEventListener('click', () => {
-    const k = btn.dataset.fk, v = btn.dataset.fv;
-    f[k] = f[k].includes(v) ? f[k].filter(x => x !== v) : [...f[k], v]; nav();
-  }));
-  document.querySelectorAll('[data-fs]').forEach(btn => btn.addEventListener('click', () => {
-    const k = btn.dataset.fs, v = btn.dataset.fv;
-    f[k] = f[k] === v ? '' : v; nav();
-  }));
-  document.querySelectorAll('[data-fb]').forEach(btn => btn.addEventListener('click', () => {
-    const k = btn.dataset.fb; f[k] = !f[k]; nav();
-  }));
-  const range = (id, key, fmt) => { const el = document.getElementById(id); if (!el) return;
-    el.addEventListener('input', () => { document.getElementById(id+'Val').textContent = +el.value ? fmt(el.value) : 'Any'; });
-    el.addEventListener('change', () => { f[key] = +el.value; nav(); }); };
-  range('imdbMin','imdbMin', v=>'≥ '+v); range('rtcMin','rtcMin', v=>'≥ '+v+'%'); range('rtaMin','rtaMin', v=>'≥ '+v+'%');
-  const sel = (id, key) => { const el = document.getElementById(id); if (!el) return;
-    el.addEventListener('change', () => { f[key] = el.value; nav(); }); };
-  sel('directorSel','director'); sel('actorSel','actor'); sel('sortSel','sort');
-  const clear = () => { const q = f.q; f = emptyF(); f.q = q; nav(); };
-  document.getElementById('clearFilters')?.addEventListener('click', clear);
-  document.getElementById('clearAll2')?.addEventListener('click', () => { f = emptyF(); nav(); });
-  const fns = activeChips._fns || [];
-  document.querySelectorAll('.achip [data-clear]').forEach((btn, i) => btn.addEventListener('click', e => {
-    e.preventDefault(); fns[i] && fns[i](f); nav();
-  }));
-  const tf = document.getElementById('toggleFilters');
-  tf?.addEventListener('click', () => { const p = document.getElementById('filterPanel');
-    p.classList.toggle('open'); tf.setAttribute('aria-expanded', p.classList.contains('open')); });
 }
 </script>

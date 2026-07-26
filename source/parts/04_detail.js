@@ -102,8 +102,9 @@ function viewDetail(m) {
         ${personal.length ? `<div class="personal-box">${personal.join('')}</div>` : ''}
         ${m.summary ? `<p class="d-summary">${esc(m.summary)}</p>` : ''}
         <div class="d-actions">
-          ${m.trailer ? `<a class="btn primary" href="${attr(m.trailer)}" target="_blank" rel="noopener">▶ Watch trailer</a>` : ''}
-          ${m.link ? `<a class="btn" href="${attr(m.link)}" target="_blank" rel="noopener">Open movie link ↗</a>` : ''}
+          ${m.plex ? `<a class="btn primary" href="${attr(m.plex)}" target="_blank" rel="noopener">▶ Watch on Plex</a>` : ''}
+          ${m.trailer ? `<a class="btn ${m.plex?'':'primary'}" href="${attr(m.trailer)}" target="_blank" rel="noopener">Trailer</a>` : ''}
+          ${m.link ? `<a class="btn" href="${attr(m.link)}" target="_blank" rel="noopener">Movie link ↗</a>` : ''}
         </div>
       </div>
     </div>
