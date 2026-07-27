@@ -149,10 +149,9 @@ function viewNIM(params) {
   if (q) { const nq = norm(q); list = list.filter(r => norm(r.title||'').includes(nq) || norm(r.summary||'').includes(nq)); }
   let body;
   if (src === 'Notion Database' && !q) {
-    body = `<h2 class="coll-group-title">Named movies not matched</h2>
-      <div class="nim-list">${named.map(nimItemHTML).join('')}</div>
-      <h2 class="coll-group-title">Untitled records</h2>
-      <div class="nim-list">${untitled.map(nimItemHTML).join('')}</div>`;
+    body = `<div class="nim-list">${named.map(nimItemHTML).join('')}</div>
+      ${untitled.length ? `<h2 class="coll-group-title">Untitled records</h2>
+      <div class="nim-list">${untitled.map(nimItemHTML).join('')}</div>` : ''}`;
   } else {
     body = list.length ? `<div class="nim-list">${list.map(nimItemHTML).join('')}</div>`
       : `<div class="empty"><div class="big">No records match</div></div>`;

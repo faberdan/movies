@@ -43,6 +43,17 @@ def main():
                 if e.get("poster"): m["poster"] = e["poster"]
                 if e.get("cast"): m["cast"] = e["cast"]
                 if e.get("tmdbId"): m["tmdbId"] = e["tmdbId"]
+    # trailers: workbook link > official TMDB trailer > YouTube search fallback
+    import urllib.parse
+    tr_path = os.path.join(HERE, "trailers.json")
+    tr = json.load(open(tr_path)) if os.path.exists(tr_path) else {}
+    for m in data["movies"]:
+        if not m.get("trailer"):
+            if tr.get(m["id"]):
+                m["trailer"] = "https://www.youtube.com/watch?v=" + tr[m["id"]]
+            else:
+                q = urllib.parse.quote_plus(f"{m['title']} {m['year'] or ''} trailer".strip())
+                m["trailer"] = "https://www.youtube.com/results?search_query=" + q
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     payload = payload.replace("</", "<\\/")  # keep </script> safe inside script tag
 

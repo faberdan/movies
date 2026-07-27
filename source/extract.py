@@ -86,6 +86,9 @@ for _, row in xl.parse("Awards Detail").iterrows():
 notin = []
 for _, row in xl.parse("Not in Master").iterrows():
     n = {k: clean(v) for k, v in row.items()}
+    # skip accidental empty Notion rows (titled "(Untitled Notion entry)" by the importer)
+    if n["Source"] == "Notion Database" and (not n["Title"] or "untitled notion entry" in str(n["Title"]).lower()):
+        continue
     notin.append({
         "source": n["Source"], "sourceRow": n["Source Row"], "title": n["Title"],
         "year": to_num(n["Year"]), "status": n["Notion Status"], "favorite": n["Favorite?"],
